@@ -2,9 +2,9 @@ componentType: bindings.smtp
 version: v1
 metadata:
   - name: host
-    value: maildev
+    value: smtp.freesmtpservers.com
   - name: port
-    value: 1025
+    value: 25
   - name: user
     value: "_username"
   - name: password

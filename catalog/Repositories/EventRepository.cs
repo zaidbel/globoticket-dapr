@@ -57,7 +57,7 @@ public class EventRepository : IEventRepository
         });
     }
 
-    public async Task<IEnumerable<Event>> GetEvents()
+     public async Task<IEnumerable<Event>> GetEvents()
     {
         try
         {
@@ -70,8 +70,7 @@ public class EventRepository : IEventRepository
         }
         return events;
     }
-
-    private async Task<string> GetConnectionString()
+private async Task<string> GetConnectionString()
     {
         // using the DAPR_HTTP_PORT environment variable to detect if we're
         // not running in DAPR
@@ -86,7 +85,6 @@ public class EventRepository : IEventRepository
         var secret = await daprClient.GetSecretAsync(secretStoreName, secretName);
         return secret[secretName];
     }
-
     public Task<Event> GetEventById(Guid eventId)
     {
         var @event = events.FirstOrDefault(e => e.EventId == eventId);
@@ -97,16 +95,4 @@ public class EventRepository : IEventRepository
         return Task.FromResult(@event);
     }
 
-    // scheduled task calls this periodically to put one item on special offer
-    public void UpdateSpecialOffer()
-    {
-        // reset all tickets to their default
-        events.Clear();
-        LoadSampleData();
-        // pick a random one to put on special offer
-        var random = new Random();
-        var specialOfferEvent = events[random.Next(0,events.Count)];
-        // 20 percent off
-        specialOfferEvent.Price = (int)(specialOfferEvent.Price * 0.8);
-    }
 }

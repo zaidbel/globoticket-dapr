@@ -1,18 +1,10 @@
-## These scripts are to deploy GloboTicket onto Azure Container Apps
-## https://docs.microsoft.com/en-us/azure/container-apps/
-## Note that Azure Container Apps are currently still in preview and these
-## instructions were made with 0.3.2 of the containerapp extension
-## There are a few issues at the moment
-## - the catalog service can't directly access secrets via the Dapr API (I've tried the kubernetes store as well as an environment variable secret store, but neither have worked so far)
-## - the ordering microservice can't seem to talk to the maildev server at the moment
-
 ### STEP 1 - create the Azure Container Apps Environment
 # more info https://docs.microsoft.com/en-us/azure/container-apps/microservices-dapr?tabs=powershell
 
 # log in to Azure CLI
 az login
 # select the subscription we want to use
-az account set -s "My sub name"
+az account set -s "PREMI0209362 - CCA SL Azure"
 
 # ensure we have the Azure CLI container apps extension installed 
 az extension add --name containerapp --upgrade
@@ -64,26 +56,21 @@ $SERVICE_BUS_CONNECTION_STRING = az servicebus namespace authorization-rule keys
 ### STEP 4 - get containers pushed to docker
 
 # ensure we've built all our containers
-docker build -f .\frontend\Dockerfile -t markheath/globoticket-dapr-frontend .
-docker build -f .\catalog\Dockerfile -t markheath/globoticket-dapr-catalog .
-docker build -f .\ordering\Dockerfile -t markheath/globoticket-dapr-ordering .
+docker build -f .\frontend\Dockerfile -t zaidbel/globoticket-dapr-frontend .
+docker build -f .\catalog\Dockerfile -t zaidbel/globoticket-dapr-catalog .
+docker build -f .\ordering\Dockerfile -t zaidbel/globoticket-dapr-ordering .
 
 # and push them to Docker hub 
 # (real world would use ACR instead for private hosting and faster download in Azure)
-docker push markheath/globoticket-dapr-frontend
-docker push markheath/globoticket-dapr-catalog
-docker push markheath/globoticket-dapr-ordering
+docker push zaidbel/globoticket-dapr-frontend
+docker push zaidbel/globoticket-dapr-catalog
+docker push zaidbel/globoticket-dapr-ordering
 
 # STEP 5 - deploy component definitions
 # unfortunately, there seems to be no simple way to deal with secrets at the moment
 # we will use temporary files to avoid checking secrets into source control
 
 $COMPONENTS_FOLDER = "./dapr/containerapps-components" 
-
-az containerapp env dapr-component set `
-  --name $CONTAINERAPPS_ENVIRONMENT --resource-group $RESOURCE_GROUP `
-  --dapr-component-name scheduled `
-  --yaml "$COMPONENTS_FOLDER/scheduled.yaml"
 
 (Get-Content -Path "$COMPONENTS_FOLDER/pubsub.yaml" -Raw).Replace('<SERVICE_BUS_CONNECTION_STRING>',$SERVICE_BUS_CONNECTION_STRING) | Set-Content -Path "$COMPONENTS_FOLDER/pubsub.tmp.yaml" -NoNewline
 
@@ -104,25 +91,13 @@ az containerapp env dapr-component set `
   --dapr-component-name sendmail `
   --yaml "$COMPONENTS_FOLDER/sendmail.yaml"
 
-# https://docs.microsoft.com/en-us/azure/container-apps/manage-secrets?tabs=azure-cli
-
 # STEP 5 - deploy apps
-# maildev does not need to be Dapr enabled. It listens on 1025 for SMTP and 1080
-az containerapp create `
-  --name maildev `
-  --resource-group $RESOURCE_GROUP `
-  --environment $CONTAINERAPPS_ENVIRONMENT `
-  --image maildev/maildev `
-  --target-port 1080 `
-  --ingress 'external' `
-  --min-replicas 1 `
-  --max-replicas 1
 
 az containerapp create `
   --name frontend `
   --resource-group $RESOURCE_GROUP `
   --environment $CONTAINERAPPS_ENVIRONMENT `
-  --image markheath/globoticket-dapr-frontend `
+  --image zaidbel/globoticket-dapr-frontend `
   --target-port 80 `
   --ingress 'external' `
   --min-replicas 1 `
@@ -131,14 +106,11 @@ az containerapp create `
   --dapr-app-port 80 `
   --dapr-app-id frontend
 
-# https://github.com/microsoft/azure-container-apps/issues/147
-
-
 az containerapp create `
   --name catalog `
   --resource-group $RESOURCE_GROUP `
   --environment $CONTAINERAPPS_ENVIRONMENT `
-  --image markheath/globoticket-dapr-catalog `
+  --image zaidbel/globoticket-dapr-catalog `
   --target-port 80 `
   --ingress 'internal' `
   --min-replicas 1 `
@@ -146,17 +118,12 @@ az containerapp create `
   --enable-dapr `
   --dapr-app-port 80 `
   --dapr-app-id catalog `
-  --env-vars SECRET_STORE_NAME="Kubernetes" eventcatalogdb="DBConnectionStringFromEnvVar" `
-  --secrets "eventcatalogdb=EventCatalogConnectionStringFromContainerApps"
-
-# example of updating an app:
-# az containerapp update -n catalog -g $RESOURCE_GROUP --set-env-vars SECRET_STORE_NAME="kubernetes"
 
 az containerapp create `
   --name ordering `
   --resource-group $RESOURCE_GROUP `
   --environment $CONTAINERAPPS_ENVIRONMENT `
-  --image markheath/globoticket-dapr-ordering `
+  --image zaidbel/globoticket-dapr-ordering `
   --target-port 80 `
   --ingress 'internal' `
   --min-replicas 1 `
@@ -174,10 +141,6 @@ Start-Process "https://$FQDN"
 
 az containerapp logs show -n frontend -g $RESOURCE_GROUP
 az containerapp logs show -n catalog -g $RESOURCE_GROUP
-
-$MAILDEV_SERVER = az containerapp show --name maildev --resource-group $RESOURCE_GROUP `
-  --query properties.configuration.ingress.fqdn -o tsv
-Start-Process "https://$MAILDEV_SERVER"
 
 # Log analytics query
 # ContainerAppConsoleLogs_CL | where ContainerAppName_s == "ordering"
